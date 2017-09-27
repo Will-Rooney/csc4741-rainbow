@@ -1,2 +1,2 @@
-# csc4747-rainbow
-CSCI 4747 Cyber Security Project: Rainbow Tables
+# csc4741-rainbow
+CSCI 4741 Cyber Security Project: Rainbow Tables
