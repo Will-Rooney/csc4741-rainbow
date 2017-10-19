@@ -33,8 +33,8 @@ class RainbowTable:
 		""" Generate a Rainbow Table with the character set [0-9] or [a-z]; Randomly generate inputs or load inputs from line delimited file """
 
 		for plaintext_Start in self.passwordSet:	
-			if len(self.table) == self.k:
-				return True # Rainbow table successfully filled out
+			#if len(self.table) == self.k:
+				#return True # Rainbow table successfully filled out
 
 			# Generate Chain
 			plaintext_End = plaintext_Start
@@ -44,7 +44,7 @@ class RainbowTable:
 			if plaintext_End not in self.table.values():
 				self.table[plaintext_Start] = plaintext_End			# If final hash has not been used then add the starting plaintext and ending plaintext to the table
 			
-		return False # Failed to fill out entire rainbow table
+		#return False # Failed to fill out entire rainbow table
 
 
 	def R(self, i, hash_object): # Play with this function to find better rainbow table generations
@@ -78,14 +78,15 @@ class RainbowTable:
 	def reset(self):
 		self.table = {}
 
-	def getK(self):
+	def getK(self, minK=2):
 		""" Find most optimal k value for rainbow table generation """
 		self.reset()
-		self.k = 1
-		maxK = math.sqrt(10**self.strLength) # setting max k to the square root of the number of possible combonations; k length chains * k length rainbow table ~ k^2 plaintexts analyzed
+		self.k = maxK = int(math.sqrt(10**self.strLength)) # setting max k to the square root of the number of possible combonations; k length chains * k length rainbow table ~ k^2 plaintexts analyzed
 		bestK = 0
 		maxSuccess = 0
-		while self.k <= maxK:
+		bestTableSize = 0
+		bestResults = []
+		while self.k >= minK:
 			self.generate()
 			successCount = 0
 			for password in self.passwordSet:
@@ -95,10 +96,12 @@ class RainbowTable:
 			if successCount > maxSuccess:
 				maxSuccess = successCount
 				bestK = self.k
+				bestTableSize = len(self.table)
+				result = [bestK, bestTableSize, (float(maxSuccess)/len(self.passwordSet))*100]
+				bestResults.append(result)
 			self.reset()
-			self.k += 1
-		print ('Best k:',bestK,'\nPercent of passwords cracked:',(float(maxSuccess)/len(self.passwordSet))*100,'%')
-		return bestK
+			self.k -= 1
+		return bestResults
 
 """ -----------------------------------------------------------------------------------------------------------
 	TESTS
@@ -106,18 +109,32 @@ class RainbowTable:
 def findBestK():
 	print ('Getting best table for passwords of length: 1')
 	rainbowTable1 = RainbowTable(strLength=1)
-	k1 = rainbowTable1.getK()
+	result1 = rainbowTable1.getK()
+	for result in reversed(result1):
+		print ('k:',result[0],', TableSize:',result[1],', Percent cracked:',result[2],'%')
+
 	print ('\nGetting best table for passwords of length: 2')
 	rainbowTable2 = RainbowTable(strLength=2)
-	k1 = rainbowTable2.getK()
+	result2 = rainbowTable2.getK()
+	for result in reversed(result2):
+		print ('k:',result[0],', TableSize:',result[1],', Percent cracked:',result[2],'%')
+
 	print ('\nGetting best table for passwords of length: 3')
 	rainbowTable3 = RainbowTable(strLength=3)
-	k1 = rainbowTable3.getK()
+	result3 = rainbowTable3.getK()
+	for result in reversed(result3):
+		print ('k:',result[0],', TableSize:',result[1],', Percent cracked:',result[2],'%')
+
 	print ('\nGetting best table for passwords of length: 4')
 	rainbowTable4 = RainbowTable(strLength=4)
-	k1 = rainbowTable4.getK()
+	result4 = rainbowTable4.getK()
+	for result in reversed(result4):
+		print ('k:',result[0],', TableSize:',result[1],', Percent cracked:',result[2],'%')
+
 	print ('\nGetting best table for passwords of length: 5')
 	rainbowTable5 = RainbowTable(strLength=5)
-	k1 = rainbowTable5.getK()
+	result5 = rainbowTable5.getK()
+	for result in reversed(result5):
+		print ('k:',result[0],', TableSize:',result[1],', Percent cracked:',result[2],'%')
 
 findBestK()
