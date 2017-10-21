@@ -8,258 +8,230 @@
 #	William Rooney
 #	Howard Van Dam
 #	Jonathan Trejo
+#
+# Written in python 3.4.4
+#	For 2.7 change '_thread' to 'thread'
+#
 
-import hashlib, base64, re, os, math
+import hashlib, base64, re, os, math, _thread, timeit
 from itertools import product
 from string import ascii_lowercase, digits
 from time import sleep
 
-debug = False # Further testing needed
+debug = False
 
 class RainbowTable:
-	def __init__(self, tableSize=100, k=100, strLength=4, buildTable = True, isAlpha = False):
+	def __init__(self, k=100, strLength=4, generate=True):
 
 		"""
 		RainbowTable Class: builds a rainbow table with k
-		reduction functions and k chains. Each chain's starting
-		plaintext ranges from 1 to strLength characters of the set
-		of a lowercase alphabet.
+		reduction functions and k rainbow table entries. Each chain's starting
+		plaintext consists of strLength characters of the set [0-9].
 		"""
-		self.tableSize=tableSize
 		self.k = k
 		self.strLength = strLength
 		self.table = {}
-		self.buildTable = buildTable;
 
-		self.isAlpha = isAlpha
-		if isAlpha:
-			self.charSetSize = 26
-		else:
-			self.charSetSize = 10
-
-		self.hashPercent = 0
-
-	def generate(self, fileName=None):
-		""" Generate a Rainbow Table with the character set [0-9] or [a-z]; Randomly generate inputs or load inputs from line delimited file """
-		if debug: print ('Call to generate():')
-		hashCalls = 0
-		self.inputData = []
-		# Load password list
-		if fileName is not None and not self.buildTable:
-			# table generation from file
-			self.inputData = []
-			file = open(fileName, 'r')
-			for line in file:
-				line = line.strip('\n')
-				self.inputData.append(line)
-			file.close()
-
-		iteration = 0
 		# Create a set of all possible password of length strLength
-		self.charSet = []
-		if self.isAlpha:
-			self.charSet = [''.join(p) for p in product(ascii_lowercase, repeat=self.strLength)]
-		else:
-			self.charSet = [''.join(p) for p in product(digits, repeat=self.strLength)]
+		if generate: self.passwordSet = [''.join(p) for p in product(digits, repeat=self.strLength)]
 
-		while len(self.table) < self.tableSize: # Loop through password set until the rainbow table is full or input is has expired
-			#if debug: print 'Percent Complete:',str(int((float(len(self.table))/self.tableSize)*100)) + '%\tPercent Searched:',str(int((float(iteration)/(self.charSetSize**self.strLength))*100))+'%\tHashCalls:',str(int((float(hashCalls)/(self.charSetSize**self.strLength))*100))+'%'
-			
-			# Get starting plaintext for chain
-			if self.buildTable: # use input from generated set
-				if iteration >= len(self.charSet):
-					if debug: print ("Failed to fill out table")
+	def load(self, fileName):
+		"""
+		Load a pre-computed rainbow table.
+		The first line contains the k value
+		an entry contains start and end values that are comma delimited
+		each entry in the table is newline delimited
+		"""
+		try:
+			infile = open(fileName, 'r')
+			self.k = int(next(infile))
+			for line in infile:
+				try:
+					line = line.strip('\n')
+					data = line.split(',')
+					self.table[data[0]] = data[1]
+				except IndexError:
+					print ('Error: Invalid file contents in file:',fileName)
 					return
-				plaintext_Start = self.charSet[iteration]
-				#if debug: print 'newPlaintext1'
-			else: # use input from file
-				if iteration >= len(self.inputData):
-					# Exhausted file input, generating rest of input
-					if debug: print ("Failed to fill out table")
-					self.buildTable = True
-					iteration = 0
-					plaintext_Start = self.charSet[iteration]
-				else:
-					plaintext_Start = self.inputData[iteration]
-				#if debug: print 'newPlaintext2'
+			infile.close()
+		except IOError:
+			print ('Error: Could not read file:',fileName)
 
+	def save(self, fileName=None):
+		"""
+		Save the current rainbow table.
+		The first line contains the k value
+		an entry contains start and end values that are comma delimited
+		each entry in the table is newline delimited
+		"""
+		if fileName == None:
+			fileName = 'rainbowTable_len' + str(self.strLength) + '_k' + str(self.k) + '.txt'
+		try:
+			outfile = open(fileName, 'w')
+			outfile.write('%s\n' % str(self.k))
+			for start, end in self.table.items():
+				outfile.write('%s,%s\n' % (start, end))
+			outfile.close()
+		except IOError:
+			print ('Error: Could not write to file:',fileName)
+
+
+	def generate(self):
+		""" Generate a Rainbow Table with the character set [0-9] or [a-z]; Randomly generate inputs or load inputs from line delimited file """
+
+		for plaintext_Start in self.passwordSet:	
 			# Generate Chain
 			plaintext_End = plaintext_Start
 			for i in range(self.k):
-				hash_object = hashlib.md5(plaintext_End.encode())				# Create hash
-				hashCalls += 1
-				#if debug: print 'new hash'
-				if self.isAlpha:
-					plaintext_End = self.R_alpha(i, hash_object.hexdigest())	# Reduce to alphabetic plaintext
-				else:
-					plaintext_End = self.R_num(i, hash_object.hexdigest())		# Reduce to numeric plaintext
-				#if debug: print 'newPlaintext3'
-			if debug: print (plaintext_Start,'-->',plaintext_End,'-->',hash_object.hexdigest())
-			hash_end = hashlib.md5(plaintext_End.encode()).hexdigest()			# Get final hash
-			hashCalls += 1
-			if hash_end not in self.table.values():
-				self.table[plaintext_Start] = hash_end							# If final hash has not been used then add the starting plaintext and ending hash to the table
-			#sleep(3)
-			iteration += 1
+				hash_object = hashlib.md5(plaintext_End.encode())	# Create hash
+				plaintext_End = self.R(i, hash_object.hexdigest())	# Reduce to numeric plaintext
+			if plaintext_End not in self.table.values():
+				self.table[plaintext_Start] = plaintext_End			# If final hash has not been used then add the starting plaintext and ending plaintext to the table
 
-			#if debug: 
-				#if os.name == 'nt': os.system('cls')
-				#else: os.system('clear')
-		self.hashPercent += (float(hashCalls)/(self.charSetSize**self.strLength))*100
-
-	def load(self, fileName):
-		""" Load pre-existing Rainbow Table - Not Tested """
-		self.inputData = []
-		file = open(fileName, 'r')
-		for line in file:
-			line = line.strip('\n')
-			data = line.split(',')
-			self.table[data[0]] = data[1]
-		file.close()
-		self.k = len(self.table)
-
-	def R_alpha(self, i, hash_object):
-		""" Reduction function #i --- NEEDS IMPROVEMENT : Majority of chains are ending on similar values"""
-		hash_object = str(hash_object) + str(i)
-		hash_value = int(hash_object,16)
-		hash_value = (hash_value+i) % (26**self.strLength)
-		plaintext = self.num_to_alpha(hash_value)
-		#print hash_object,'-->',hash_value,'-->',plaintext[-self.strLength:]
-		#sleep(0.1)
-		temp = 0
-		while len(plaintext) < self.strLength:
-			#if debug: print 'looking for plaintext',plaintext
-			plaintext = self.num_to_alpha(hash_value+i+temp)
-			temp += 1
-		#print 'found:',plaintext
-		return plaintext[-self.strLength:]
-		#i = i+2
-		#hash_object = str(hash_object) + str(i*i)
-		#plaintext = self.num_to_alpha(hash_object)
-		#return plaintext[-self.strLength:]
-
-	def num_to_alpha(self, num):
-		b64 = base64.b64encode(str(num).encode('ascii'))
-		return (''.join(re.findall("[a-z]+",b64.decode('utf-8')))).lower()
-
-	def R_num(self, i, hash_object):
-		""" Reduction function #i """
-		plaintext = ''.join(re.findall("[0-9]+",hash_object))[-self.strLength:]		# Extract all digits from
-		val = int(plaintext)+i 														# Add i
-		plaintext = str(val) 														# Convert back to string
-		while len(plaintext) < self.strLength:										# Format String
+	def R(self, i, hash_object): # Play with this function to find better rainbow table generations
+		""" Reduction function #i : Return a plaintext string of length strLength that contains characters [0-9] """
+		val = (int(''.join(re.findall("[0-9]+",hash_object))) + i) % 10**self.strLength	# Extract all digits from hash and add i
+		plaintext = str(val) 						# Convert back to string
+		while len(plaintext) < self.strLength:		# Format String
 			plaintext = "0" + plaintext
-		if len(plaintext) > self.strLength:
-			plaintext = plaintext[-self.strLength:]									# Return last 'strLength' characters of string
-		return plaintext
+		return plaintext[-self.strLength:]			# Return last 'strLength' characters of string
 
 	def crack(self,passHash):
 		newHash = passHash
 		iteration = 1
 		passPlaintext = ''
 		for iteration in range(self.k):
-			for i in range(iteration+1):
-				if self.isAlpha: passPlaintext = self.R_alpha(i+(self.k-1-iteration), newHash.hexdigest())
-				else: passPlaintext = self.R_num(i+(self.k-1-iteration), newHash.hexdigest())
-				newHash = hashlib.md5(passPlaintext.encode())
-			#if debug: print ('Iteration:',iteration+1,'-->',newHash.hexdigest())
+			for i in range(iteration+1): # Apply R(k-iteration) through R(k) reduction functions on hash
+				passPlaintext = self.R(i+(self.k-1-iteration), newHash)
+				newHash = hashlib.md5(passPlaintext.encode()).hexdigest()
 			for key, val in self.table.items():
-				if (newHash.hexdigest() == val):
-					#if debug: print ('Match found!')
+				if (passPlaintext == val): # Found a matching end value in rainbow table
 					# Generate chain from key
 					newPlaintext = key
-					#if debug: print ('key --> val :',key,'-->',val)
 					for j in range(self.k):
-						newHash = hashlib.md5(newPlaintext.encode())
-						if newHash.hexdigest() == passHash.hexdigest():
+						newHash = hashlib.md5(newPlaintext.encode()).hexdigest()
+						if newHash == passHash:
 							self.password = newPlaintext
-							#if debug: print ('Success!')
-							return True
-						tempPlaintext = ''
-						if self.isAlpha: tempPlaintext = self.R_alpha(j, newHash.hexdigest())
-						else: tempPlaintext = self.R_num(j, newHash.hexdigest())
-						#if debug: print ('\t',newPlaintext,'-->',newHash.hexdigest(),'-->',tempPlaintext)
-						newPlaintext = tempPlaintext
-		return False
+							return True # Found the matching password
+						newPlaintext = self.R(j, newHash)
+		return False # Failed to find a match
 
 	def reset(self):
 		self.table = {}
 
+	def getK(self, minK=2):
+		""" Find most optimal k value for rainbow table generation """
+		self.reset()
+		self.k = maxK = int(math.sqrt(10**self.strLength)) # setting max k to the square root of the number of possible combonations; k length chains * k length rainbow table ~ k^2 plaintexts analyzed
+		bestK = 0
+		maxSuccess = 0
+		bestTableSize = 0
+		bestResults = []
+		while self.k >= minK:
+			self.generate()
+			successCount = 0
+			for password in self.passwordSet:
+				passHash = hashlib.md5(password.encode())
+				if self.crack(passHash.hexdigest()):
+					successCount += 1
+			if successCount >= maxSuccess:
+				maxSuccess = successCount
+				bestK = self.k
+				bestTableSize = len(self.table)
+				result = [bestK, bestTableSize, (float(maxSuccess)/len(self.passwordSet))*100]
+				bestResults.append(result)
+				self.save()
+			self.reset()
+			self.k -= 1
+		return bestResults
+
+"""
+----------------------------------------------------------------------------------------------
+  TESTS
+----------------------------------------------------------------------------------------------
+"""
+def findBestK(strLen=1):
+	#print ('Getting best table for passwords of length:',strLen)
+	rainbowTable = RainbowTable(strLength=strLen)
+	result1 = rainbowTable.getK()
+	print ('Optimal tables for passwords of length: %s' % strLen)
+	for result in reversed(result1):
+		print ('k:',result[0],'\t TableSize:',result[1],'\t Percent cracked:',result[2],'%')
+	print()
+
+def findBestKThreaded():
+	try:
+		_thread.start_new_thread(findBestK, (1,))
+		sleep(1)
+		_thread.start_new_thread(findBestK, (2,))
+		
+		_thread.start_new_thread(findBestK, (3,))
+		_thread.start_new_thread(findBestK, (4,))
+		_thread.start_new_thread(findBestK, (5,))
+	except:
+		print ('Error: unable to start thread')
+
+	while 1:
+		pass
 
 
+def crackPass(passHash):
+	# Try two 3 character rainbow tables
+	rainbowTable1 = RainbowTable(31,3,False)
+	rainbowTable2 = RainbowTable(30,3,False)
 
-""" -----------------------------------------------------------------------------------------------------------
-	TESTS
-	----------------------------------------------------------------------------------------------------------- """
-def test(password, buildTable=True, isAlpha=False, fileName=None):
-	rainbowTable = RainbowTable(5, 5,1, buildTable, isAlpha)
-
-	passHash = hashlib.md5(password.encode())
-
-	searching = True
-	maxK=rainbowTable.charSetSize**rainbowTable.strLength
-	print ("Cracking the password hash:",passHash.hexdigest())
-	print ('Increasing table string length to',rainbowTable.strLength)
-	while searching:
-		rainbowTable.reset()
-		rainbowTable.generate(fileName)
-		#print ('Generated Rainbow Table with',rainbowTable.k,'reduction functions and chains using a max of',rainbowTable.strLength,'digits from 0-9.\n')
-		if rainbowTable.crack(passHash):
-			print ('Password found:',rainbowTable.password)
-			print ('Actual password:',password)
-			print 'actual table size:',len(rainbowTable.table),'k:',rainbowTable.k,'hash %:',rainbowTable.hashPercent
-			searching = False
-		else:
-			#print ('Attack Failed: increasing k')
-			rainbowTable.k += 1
-			rainbowTable.tableSize += 1
-			if rainbowTable.k > maxK:
-				rainbowTable.strLength += 1
-				if rainbowTable.strLength == 2: maxK = math.sqrt(rainbowTable.charSetSize**rainbowTable.strLength)*2
-				elif rainbowTable.strLength > 2: maxK = math.sqrt(10**rainbowTable.strLength)
-				else: maxK=rainbowTable.charSetSize**rainbowTable.strLength
-				print ('Increasing table string length to',rainbowTable.strLength)
-				if rainbowTable.strLength > len(password):
-					print ('Attacked Failed')
-					searching = False
-
-def testR(password):
-	rainbowTable = RainbowTable(10,4,True,True)
-	passHash = hashlib.md5(password.encode())
-	print 'Hash:',passHash
-	for i in range (rainbowTable.k):
-		plaintext = rainbowTable.R_alpha(i, passHash.hexdigest())
-		print 'R' + str(i) + ':',plaintext
-
-def testSingleTable(password, tableSize,k):
-	rainbowTable = RainbowTable(tableSize,k,len(password), False, True)
-	passHash = hashlib.md5(password.encode())
-
-	print ("Cracking the password hash:",passHash.hexdigest())
-	rainbowTable.generate('four_char_passwords_500')
-	#print ('Generated Rainbow Table with',rainbowTable.k,'reduction functions and chains using a max of',rainbowTable.strLength,'digits from 0-9.\n')
-	if rainbowTable.crack(passHash):
-		print ('Password found:',rainbowTable.password)
-		print ('Actual password:',password)
+	rainbowTable1.load('rainbowTable_len3_k31.txt')
+	print ('Attempting to crack 3 character password with hash:',passHash)
+	if rainbowTable1.crack(passHash):
+		print ('Found password:',rainbowTable1.password,'\n')
+		return
 	else:
-		print ('Attack Failed')
+		print ('Attack failed: trying new table')
+		rainbowTable2.load('rainbowTable_len3_k30.txt')
+		if rainbowTable2.crack(passHash):
+			print ('Found password:',rainbowTable2.password,'\n')
+			return
+		else:
+			print ('Three character password attack failed\n')
 
+	# Try two 4 character rainbow tables
+	rainbowTable3 = RainbowTable(100,4,False)
+	rainbowTable4 = RainbowTable(99,4,False)
 
+	rainbowTable3.load('rainbowTable_len4_k100.txt')
+	print ('Attempting to crack 4 character password with hash:',passHash)
+	if rainbowTable3.crack(passHash):
+		print ('Found password:',rainbowTable3.password,'\n')
+		return
+	else:
+		print ('Attack failed: trying new table')
+		rainbowTable4.load('rainbowTable_len4_k99.txt')
+		if rainbowTable4.crack(passHash):
+			print ('Found password:',rainbowTable4.password,'\n')
+			return
+		else:
+			print ('Four character password attack failed\n')
 
+"""
+findBestK(1)
+findBestK(2)
+findBestK(3)
+findBestK(4)
+findBestK(5)
+"""
+#findBestKThreaded()
 
-# Numeric password
-password = '1234'
-test(password, True, False, None)
+#"""
+#password = '8794'
+#passHash = hashlib.md5(password.encode()).hexdigest()
+passHash = '81dc9bdb52d04dc20036dbd8313ed055'
 
-#print()
+if os.name == 'nt': os.system('cls')
+else: os.system('clear')
 
-# Alphabetic (lowercase) password
-password = 'code'
-test(password, False, True, "four_char_passwords_500")
+start = timeit.default_timer()
+crackPass(passHash)
+stop = timeit.default_timer()
 
-# Test Reduction - alpha
-#password = 'pass'
-#testR(password)
-
-# Test single table
-#testSingleTable('pass', 169, 169)
+print ('Execution time:',stop-start,'seconds')
+#"""
