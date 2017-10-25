@@ -13,19 +13,16 @@
 #	For 2.7 change '_thread' to 'thread'
 #
 
-import hashlib, base64, re, os, math, _thread, timeit
+import hashlib, re, os, math, timeit
 from itertools import product
 from string import ascii_lowercase, digits
-from time import sleep
-
-debug = False
 
 class RainbowTable:
 	def __init__(self, k=100, strLength=4, generate=True):
 
 		"""
 		RainbowTable Class: builds a rainbow table with k
-		reduction functions and k rainbow table entries. Each chain's starting
+		reduction functions. Each chain's starting
 		plaintext consists of strLength characters of the set [0-9].
 		"""
 		self.k = k
@@ -77,7 +74,7 @@ class RainbowTable:
 
 
 	def generate(self):
-		""" Generate a Rainbow Table with the character set [0-9] or [a-z]; Randomly generate inputs or load inputs from line delimited file """
+		""" Generate a Rainbow Table with the character set [0-9] used for plaintext inputs with k reduction functions used in a chain"""
 
 		for plaintext_Start in self.passwordSet:	
 			# Generate Chain
@@ -86,17 +83,15 @@ class RainbowTable:
 				hash_object = hashlib.md5(plaintext_End.encode())	# Create hash
 				plaintext_End = self.R(i, hash_object.hexdigest())	# Reduce to numeric plaintext
 			if plaintext_End not in self.table.values():
-				self.table[plaintext_Start] = plaintext_End			# If final hash has not been used then add the starting plaintext and ending plaintext to the table
+				self.table[plaintext_Start] = plaintext_End			# If final plaintext in chain has not already been created then add the starting plaintext and ending plaintext to the table
 
 	def R(self, i, hash_object): # Play with this function to find better rainbow table generations
-		""" Reduction function #i : Return a plaintext string of length strLength that contains characters [0-9] """
-		val = (int(''.join(re.findall("[0-9]+",hash_object))) + i) % 10**self.strLength	# Extract all digits from hash and add i
-		plaintext = str(val) 						# Convert back to string
-		while len(plaintext) < self.strLength:		# Format String
-			plaintext = "0" + plaintext
-		return plaintext[-self.strLength:]			# Return last 'strLength' characters of string
+		""" Reduction function #i for i = 0,1,2,...,k-1 : Return a plaintext string of length strLength that contains characters [0-9] """
+		return str(int(''.join(re.findall("[0-9]+",hash_object))) + i)[-self.strLength:]	# Extract all digits from hash string and add i, return last strLength characters
+
 
 	def crack(self,passHash):
+		""" Attempt to crack given hash to find a matching password """
 		newHash = passHash
 		iteration = 1
 		passPlaintext = ''
@@ -104,10 +99,9 @@ class RainbowTable:
 			for i in range(iteration+1): # Apply R(k-iteration) through R(k) reduction functions on hash
 				passPlaintext = self.R(i+(self.k-1-iteration), newHash)
 				newHash = hashlib.md5(passPlaintext.encode()).hexdigest()
-			for key, val in self.table.items():
-				if (passPlaintext == val): # Found a matching end value in rainbow table
-					# Generate chain from key
-					newPlaintext = key
+			if passPlaintext in self.table.values(): # Found match in rainbow table, rebuild chain from starting entry in table
+				newPlaintext = next((key for key, val in self.table.items() if val == passPlaintext), None)
+				if newPlaintext is not None:
 					for j in range(self.k):
 						newHash = hashlib.md5(newPlaintext.encode()).hexdigest()
 						if newHash == passHash:
@@ -116,70 +110,49 @@ class RainbowTable:
 						newPlaintext = self.R(j, newHash)
 		return False # Failed to find a match
 
-	def reset(self):
-		self.table = {}
+	def getExampleChain(self, plaintext='1234', k=5):
+		"""
+		Creates a chain and returns a string of the entire chain with the following format (t=plaintext, h=hash, Rk=reduction function k):
+			    t --> h --> R1
+			--> t --> h --> R2
+			--> t --> h --> R3
+			--> ...
+			--> t --> h --> Rk --> t
+		To be used in jupyter when displaying how chains are constructed.
+		"""
+		self.strLength = len(plaintext)
+		transition = ' --> '
+		chain = ' '*(self.strLength+1) + plaintext + transition
+		for i in range(k):
+			hash_object = hashlib.md5(plaintext.encode())	# Create hash
+			plaintext = self.R(i, hash_object.hexdigest())	# Reduce to numeric plaintext
 
-	def getK(self, minK=2):
-		""" Find most optimal k value for rainbow table generation """
-		self.reset()
-		self.k = maxK = int(math.sqrt(10**self.strLength)) # setting max k to the square root of the number of possible combonations; k length chains * k length rainbow table ~ k^2 plaintexts analyzed
-		bestK = 0
-		maxSuccess = 0
-		bestTableSize = 0
-		bestResults = []
-		while self.k >= minK:
-			self.generate()
-			successCount = 0
-			for password in self.passwordSet:
-				passHash = hashlib.md5(password.encode())
-				if self.crack(passHash.hexdigest()):
-					successCount += 1
-			if successCount >= maxSuccess:
-				maxSuccess = successCount
-				bestK = self.k
-				bestTableSize = len(self.table)
-				result = [bestK, bestTableSize, (float(maxSuccess)/len(self.passwordSet))*100]
-				bestResults.append(result)
-				self.save()
-			self.reset()
-			self.k -= 1
-		return bestResults
+			# format output
+			chain += hash_object.hexdigest() + transition + 'R' + str(i+1)
+			if i != k-1:
+				chain += '\n' + transition + plaintext + transition
+			else:
+				chain += transition + plaintext
+		return chain
+
 
 """
 ----------------------------------------------------------------------------------------------
   TESTS
 ----------------------------------------------------------------------------------------------
 """
-def findBestK(strLen=1):
-	#print ('Getting best table for passwords of length:',strLen)
-	rainbowTable = RainbowTable(strLength=strLen)
-	result1 = rainbowTable.getK()
-	print ('Optimal tables for passwords of length: %s' % strLen)
-	for result in reversed(result1):
-		print ('k:',result[0],'\t TableSize:',result[1],'\t Percent cracked:',result[2],'%')
-	print()
 
-def findBestKThreaded():
-	try:
-		_thread.start_new_thread(findBestK, (1,))
-		sleep(1)
-		_thread.start_new_thread(findBestK, (2,))
-		
-		_thread.start_new_thread(findBestK, (3,))
-		_thread.start_new_thread(findBestK, (4,))
-		_thread.start_new_thread(findBestK, (5,))
-	except:
-		print ('Error: unable to start thread')
+def crackPassExample():
+	passPlainText = '01234'
+	passHash = hashlib.md5(passPlainText.encode()).hexdigest()
+	#passHash = '81dc9bdb52d04dc20036dbd8313ed055'
 
-	while 1:
-		pass
+	if os.name == 'nt': os.system('cls')
+	else: os.system('clear')
 
-
-def crackPass(passHash):
 	# Try two 3 character rainbow tables
-	rainbowTable1 = RainbowTable(31,3,False)
+	rainbowTable1 = RainbowTable(31,3,False) # use RainbowTable(31,3,True) & rainbowTable1.generate() to generate the same rainbow table with k=31 and strLength = 3
 	rainbowTable2 = RainbowTable(30,3,False)
-
 	rainbowTable1.load('rainbowTable_len3_k31.txt')
 	print ('Attempting to crack 3 character password with hash:',passHash)
 	if rainbowTable1.crack(passHash):
@@ -197,7 +170,6 @@ def crackPass(passHash):
 	# Try two 4 character rainbow tables
 	rainbowTable3 = RainbowTable(100,4,False)
 	rainbowTable4 = RainbowTable(99,4,False)
-
 	rainbowTable3.load('rainbowTable_len4_k100.txt')
 	print ('Attempting to crack 4 character password with hash:',passHash)
 	if rainbowTable3.crack(passHash):
@@ -212,26 +184,33 @@ def crackPass(passHash):
 		else:
 			print ('Four character password attack failed\n')
 
-"""
-findBestK(1)
-findBestK(2)
-findBestK(3)
-findBestK(4)
-findBestK(5)
-"""
-#findBestKThreaded()
+	# Try two 5 character rainbow tables
+	rainbowTable5 = RainbowTable(316,5,False)
+	#rainbowTable6 = RainbowTable(99,4,False)
+	rainbowTable5.load('rainbowTable_len5_k316.txt')
+	print ('Attempting to crack 5 character password with hash:',passHash)
+	if rainbowTable5.crack(passHash):
+		print ('Found password:',rainbowTable5.password,'\n')
+		return
+	else:
+		print ('Attack failed')
+		# Still processing 5 character password optimal tables
+		"""print ('Attack failed: trying new table')
+		rainbowTable6.load('rainbowTable_len5_k.txt')
+		if rainbowTable6.crack(passHash):
+			print ('Found password:',rainbowTable6.password,'\n')
+			return
+		else:
+			print ('Five character password attack failed\n')"""
 
-#"""
-#password = '8794'
-#passHash = hashlib.md5(password.encode()).hexdigest()
-passHash = '81dc9bdb52d04dc20036dbd8313ed055'
 
-if os.name == 'nt': os.system('cls')
-else: os.system('clear')
-
+# Run example and calculate exeuction time
 start = timeit.default_timer()
-crackPass(passHash)
+crackPassExample()
 stop = timeit.default_timer()
+print ('Execution time:',format(stop-start,'3.3f'),'seconds\n')
 
-print ('Execution time:',stop-start,'seconds')
-#"""
+# Create an example chain
+rainbowTable = RainbowTable(k=5,strLength=4,generate=False)
+print('Example chain:\n')
+print(rainbowTable.getExampleChain(plaintext='1234', k=5))
