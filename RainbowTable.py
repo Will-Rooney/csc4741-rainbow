@@ -8,10 +8,6 @@
 #	William Rooney
 #	Howard Van Dam
 #	Jonathan Trejo
-#
-# Written in python 3.4.4
-#	For 2.7 change '_thread' to 'thread'
-#
 
 import hashlib, re, os, math, timeit
 from itertools import product
@@ -122,7 +118,7 @@ class RainbowTable:
 		"""
 		self.strLength = len(plaintext)
 		transition = ' --> '
-		chain = ' '*(self.strLength+1) + plaintext + transition
+		chain = ' '*len(transition) + plaintext + transition
 		for i in range(k):
 			hash_object = hashlib.md5(plaintext.encode())	# Create hash
 			plaintext = self.R(i, hash_object.hexdigest())	# Reduce to numeric plaintext
