@@ -38,17 +38,18 @@ class RainbowTable:
 		try:
 			infile = open(fileName, 'r')
 			self.k = int(next(infile))
+			self.table = {} # reset table if already populated
 			for line in infile:
 				try:
 					line = line.strip('\n')
 					data = line.split(',')
 					self.table[data[0]] = data[1]
 				except IndexError:
-					print ('Error: Invalid file contents in file:',fileName)
+					print 'Error: Invalid file contents in file:',fileName
 					return
 			infile.close()
 		except IOError:
-			print ('Error: Could not read file:',fileName)
+			print 'Error: Could not read file:',fileName
 
 	def save(self, fileName=None):
 		"""
@@ -66,7 +67,7 @@ class RainbowTable:
 				outfile.write('%s,%s\n' % (start, end))
 			outfile.close()
 		except IOError:
-			print ('Error: Could not write to file:',fileName)
+			print 'Error: Could not write to file:',fileName
 
 
 	def generate(self):
@@ -150,63 +151,56 @@ def crackPassExample():
 	rainbowTable1 = RainbowTable(31,3,False) # use RainbowTable(31,3,True) & rainbowTable1.generate() to generate the same rainbow table with k=31 and strLength = 3
 	rainbowTable2 = RainbowTable(30,3,False)
 	rainbowTable1.load('rainbowTable_len3_k31.txt')
-	print ('Attempting to crack 3 character password with hash:',passHash)
+	print 'Attempting to crack 3 character password with hash:',passHash
 	if rainbowTable1.crack(passHash):
-		print ('Found password:',rainbowTable1.password,'\n')
+		print 'Found password:',rainbowTable1.password,'\n'
 		return
 	else:
-		print ('Attack failed: trying new table')
+		print 'Attack failed: trying new table'
 		rainbowTable2.load('rainbowTable_len3_k30.txt')
 		if rainbowTable2.crack(passHash):
-			print ('Found password:',rainbowTable2.password,'\n')
+			print 'Found password:',rainbowTable2.password,'\n'
 			return
 		else:
-			print ('Three character password attack failed\n')
+			print 'Three character password attack failed\n'
 
 	# Try two 4 character rainbow tables
 	rainbowTable3 = RainbowTable(100,4,False)
 	rainbowTable4 = RainbowTable(99,4,False)
 	rainbowTable3.load('rainbowTable_len4_k100.txt')
-	print ('Attempting to crack 4 character password with hash:',passHash)
+	print 'Attempting to crack 4 character password with hash:',passHash
 	if rainbowTable3.crack(passHash):
-		print ('Found password:',rainbowTable3.password,'\n')
+		print 'Found password:',rainbowTable3.password,'\n'
 		return
 	else:
-		print ('Attack failed: trying new table')
+		print 'Attack failed: trying new table'
 		rainbowTable4.load('rainbowTable_len4_k99.txt')
 		if rainbowTable4.crack(passHash):
-			print ('Found password:',rainbowTable4.password,'\n')
+			print 'Found password:',rainbowTable4.password,'\n'
 			return
 		else:
-			print ('Four character password attack failed\n')
+			print 'Four character password attack failed\n'
 
 	# Try two 5 character rainbow tables
 	rainbowTable5 = RainbowTable(316,5,False)
 	#rainbowTable6 = RainbowTable(99,4,False)
 	rainbowTable5.load('rainbowTable_len5_k316.txt')
-	print ('Attempting to crack 5 character password with hash:',passHash)
+	print 'Attempting to crack 5 character password with hash:',passHash
 	if rainbowTable5.crack(passHash):
-		print ('Found password:',rainbowTable5.password,'\n')
+		print 'Found password:',rainbowTable5.password,'\n'
 		return
 	else:
-		print ('Attack failed')
-		# Still processing 5 character password optimal tables
-		"""print ('Attack failed: trying new table')
-		rainbowTable6.load('rainbowTable_len5_k.txt')
-		if rainbowTable6.crack(passHash):
-			print ('Found password:',rainbowTable6.password,'\n')
-			return
-		else:
-			print ('Five character password attack failed\n')"""
+		print 'Attack failed'
 
-
+"""
 # Run example and calculate exeuction time
 start = timeit.default_timer()
 crackPassExample()
 stop = timeit.default_timer()
-print ('Execution time:',format(stop-start,'3.3f'),'seconds\n')
+print 'Execution time:',format(stop-start,'3.3f'),'seconds\n'
 
 # Create an example chain
 rainbowTable = RainbowTable(k=5,strLength=4,generate=False)
-print('Example chain:\n')
-print(rainbowTable.getExampleChain(plaintext='1234', k=5))
+print 'Example chain:\n'
+print rainbowTable.getExampleChain(plaintext='1234', k=5)
+"""
